@@ -1,6 +1,7 @@
 import express from 'express'
 import mongoose from 'mongoose'
 import Messages from './dbMessages.js'
+import Pusher from 'pusher'
 
 // app config
 const app = express()
@@ -8,6 +9,11 @@ const port = process.env.PORT || 9000
 
 // middleware
 app.use(express.json())
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Headers', '*')
+    next()
+})
 
 // db config
 const connection_url =
@@ -18,7 +24,36 @@ mongoose.connect(connection_url, {
     useUnifiedTopology: true,
 })
 
+const pusher = new Pusher({
+    appId: '1212492',
+    key: '54b74feac9994bc70597',
+    secret: 'ec9725c41203d1d034f7',
+    cluster: 'ap1',
+    useTLS: true,
+})
+
 // api routes
+const db = mongoose.connection
+db.once('open', () => {
+    console.log('DB is connected')
+    const messageCollection = db.collection('messagecontents')
+    const changeStream = messageCollection.watch()
+
+    changeStream.on('change', (change) => {
+        console.log('new message is', change)
+
+        if (change.operationType === 'insert') {
+            const messageDetail = change.fullDocument
+            pusher.trigger('messages', 'inserted', {
+                name: messageDetail.name,
+                message: messageDetail.message,
+            })
+        } else {
+            // console.log()
+        }
+    })
+})
+
 app.get('/', (req, res) => {
     res.status(200).send('Hello there')
 })
